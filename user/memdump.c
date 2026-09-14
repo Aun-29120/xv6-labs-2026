@@ -60,6 +60,86 @@ main(int argc, char *argv[])
 void
 memdump(char *fmt, char *data, int len)
 {
-  // Your code here.  `data` holds `len` valid bytes.
+  int offset = 0;
 
+  while (*fmt) {
+    switch (*fmt) {
+
+    case 'i': {
+      if (len - offset < 4) {
+        printf("memdump: not enough data for '%c'\n", *fmt);
+        return;
+      }
+      int x;
+      memmove(&x, data + offset, 4);
+      printf("%d\n", x);
+      offset += 4;
+      break;
+    }
+
+    case 'p': {
+      if (len - offset < 8) {
+        printf("memdump: not enough data for '%c'\n", *fmt);
+        return;
+      }
+      uint64 x;
+      memmove(&x, data + offset, 8);
+      printf("%lx\n", x);
+      offset += 8;
+      break;
+    }
+
+    case 'h': {
+      if (len - offset < 2) {
+        printf("memdump: not enough data for '%c'\n", *fmt);
+        return;
+      }
+      short x;
+      memmove(&x, data + offset, 2);
+      printf("%d\n", x);
+      offset += 2;
+      break;
+    }
+
+    case 'c': {
+      if (len - offset < 1) {
+        printf("memdump: not enough data for '%c'\n", *fmt);
+        return;
+      }
+      printf("%c\n", data[offset]);
+      offset += 1;
+      break;
+    }
+
+    case 's': {
+      if (len - offset < 8) {
+        printf("memdump: not enough data for '%c'\n", *fmt);
+        return;
+      }
+      char *s;
+      memmove(&s, data + offset, 8);
+      printf("%s\n", s);
+      offset += 8;
+      break;
+    }
+
+    case 'S': {
+      int i = offset;
+      while (i < len && data[i] != '\0') {
+        i++;
+      }
+      for (int j = offset; j < i; j++) {
+        printf("%c", data[j]);
+      }
+      printf("\n");
+      offset = len;
+      break;
+    }
+
+    default:
+      printf("Unknown format character: %c\n", *fmt);
+    }
+    fmt++;
+  }
 }
+
