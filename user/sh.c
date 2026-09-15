@@ -14,6 +14,9 @@
 
 #define MAXARGS 10
 
+#define HISTSIZE 16
+#define LINELEN 100
+
 struct cmd {
   int type;
 };
@@ -49,6 +52,31 @@ struct backcmd {
   int type;
   struct cmd *cmd;
 };
+
+char history[HISTSIZE][LINELEN];
+int hist_total = 0;
+
+void
+add_history(char *buf)
+{
+  int len = strlen(buf);
+  if(len <= 1)
+    return;
+  int j;
+  char *dst = history[hist_total % HISTSIZE];
+  for(j = 0; j < LINELEN - 1 && buf[j]; j++)
+    dst[j] = buf[j];
+  dst[j] = 0;
+  hist_total++;
+}
+
+void
+print_history(void)
+{
+  int start = hist_total > HISTSIZE ? hist_total - HISTSIZE : 0;
+  for(int idx = start; idx < hist_total; idx++)
+    printf("%d: %s", idx + 1, history[idx % HISTSIZE]);
+}
 
 int fork1(void); // Fork but panics on failure.
 void panic(char *);
@@ -212,8 +240,9 @@ getcmd(char *buf, int nbuf)
       break;
   }
   buf[i] = '\0';
-  if(buf[0] == 0) // EOF
+  if(buf[0] == 0)
     return -1;
+  add_history(buf);
   return 0;
 }
 
@@ -244,9 +273,13 @@ main(void)
       if (chdir(cmd + 3) < 0)
         fprintf(2, "cannot cd %s\n", cmd + 3);
     } else if (cmd[0] == 'w' && cmd[1] == 'a' && cmd[2] == 'i' && cmd[3] == 't' && (cmd[4] == '\n' || cmd[4] == ' ' || cmd[4] == '\t')) {
-      while (wait(0) >= 0)
-        ;
-    } else {
+      while (wait(0) >= 0);
+    } else if (cmd[0] == 'h' && cmd[1] == 'i' && cmd[2] == 's' && cmd[3] == 't' &&
+               cmd[4] == 'o' && cmd[5] == 'r' && cmd[6] == 'y' &&
+               (cmd[7] == '\n' || cmd[7] == ' ' || cmd[7] == '\t')) {
+      print_history();
+    } 
+      else {
       struct cmd *pcmd = parsecmd(cmd);
       if (fork1() == 0)
         runcmd(pcmd);
