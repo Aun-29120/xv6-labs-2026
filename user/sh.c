@@ -1,9 +1,10 @@
 // Shell.
 
 #include "kernel/types.h"
+#include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
-
+#include "kernel/fs.h"
 // Parsed command representation
 #define EXEC  1
 #define REDIR 2
@@ -124,20 +125,94 @@ runcmd(struct cmd *cmd)
 
   case BACK:
     bcmd = (struct backcmd *)cmd;
-    if (fork1() == 0)
-      runcmd(bcmd->cmd);
+    runcmd(bcmd->cmd);
     break;
   }
   exit(0);
 }
 
+void
+complete(char *buf, int *pi, int nbuf)
+{
+  int i = *pi;
+  int wordstart = i;
+  while(wordstart > 0 && buf[wordstart-1] != ' ' && buf[wordstart-1] != '\t')
+    wordstart--;
+  int wordlen = i - wordstart;
+
+  int fd;
+  struct dirent de;
+  char matches[16][DIRSIZ+1];
+  int nmatches = 0;
+
+  if(wordlen > DIRSIZ || (fd = open(".", O_RDONLY)) < 0)
+    return;
+
+  while(read(fd, &de, sizeof(de)) == sizeof(de)){
+    if(de.inum == 0)
+      continue;
+    int match = 1;
+    for(int k = 0; k < wordlen; k++){
+      if(de.name[k] != buf[wordstart+k]){
+        match = 0;
+        break;
+      }
+    }
+    if(match && nmatches < 16){
+      memmove(matches[nmatches], de.name, DIRSIZ);
+      matches[nmatches][DIRSIZ] = 0;
+      nmatches++;
+    }
+  }
+  close(fd);
+
+  if(nmatches == 0){
+    return;
+  } else if(nmatches == 1){
+    char *name = matches[0];
+    int namelen = strlen(name);
+    write(2, name+wordlen, namelen-wordlen);
+    while(wordlen < namelen && i+1 < nbuf)
+      buf[i++] = name[wordlen++];
+  } else {
+    write(2, "\n", 1);
+    for(int m = 0; m < nmatches; m++){
+      write(2, matches[m], strlen(matches[m]));
+      write(2, " ", 1);
+    }
+    write(2, "\n$ ", 3);
+    write(2, buf, i);
+  }
+  *pi = i;
+}
+
 int
 getcmd(char *buf, int nbuf)
 {
-  write(2, "$ ", 2);
+  struct stat st;
+  int i, cc;
+  char c;
+
+  if(fstat(0, &st) == 0 && st.type == T_DEVICE){
+    write(2, "$ ", 2);
+  }
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
-  if (buf[0] == 0) // EOF
+
+  i = 0;
+  while(i+1 < nbuf){
+    cc = read(0, &c, 1);
+    if(cc < 1)
+      break;
+    if(c == '\t'){
+      complete(buf, &i, nbuf);
+      continue;
+    }
+    buf[i++] = c;
+    if(c == '\n' || c == '\r')
+      break;
+  }
+  buf[i] = '\0';
+  if(buf[0] == 0) // EOF
     return -1;
   return 0;
 }
@@ -168,10 +243,15 @@ main(void)
       cmd[strlen(cmd) - 1] = 0; // chop \n
       if (chdir(cmd + 3) < 0)
         fprintf(2, "cannot cd %s\n", cmd + 3);
+    } else if (cmd[0] == 'w' && cmd[1] == 'a' && cmd[2] == 'i' && cmd[3] == 't' && (cmd[4] == '\n' || cmd[4] == ' ' || cmd[4] == '\t')) {
+      while (wait(0) >= 0)
+        ;
     } else {
+      struct cmd *pcmd = parsecmd(cmd);
       if (fork1() == 0)
-        runcmd(parsecmd(cmd));
-      wait(0);
+        runcmd(pcmd);
+      if (pcmd->type != BACK)
+        wait(0);
     }
   }
   exit(0);

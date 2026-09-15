@@ -166,6 +166,13 @@ consoleintr(int c)
       consputc(BACKSPACE);
     }
     break;
+    case '\t': // wake reader for completion  without ending the line
+    if (cons.e - cons.r < INPUT_BUF_SIZE) {
+      cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
+      cons.w = cons.e;
+      wakeup(&cons.r);
+    }
+    break;
   default:
     if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
       c = (c == '\r') ? '\n' : c;
