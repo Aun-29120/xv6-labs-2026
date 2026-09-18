@@ -76,6 +76,45 @@ def test_sandbox_bigpath():
     matches = re.findall("hello!", r.qemu.output)
     assert_equal(len(matches), 3, "Number of appearances of 'hello!'")
 
+SYS_fork = 1
+SYS_getpid = 11
+SYS_open = 15
+
+# A masked system call must not run, must return -1, and must leave the caller
+# running.
+@test(5, "sandbox_block")
+def test_sandbox_block():
+    r.run_qemu(shell_script([
+        'sandbox %d - sbtest getpid' % (1 << SYS_getpid),
+        'sandbox %d - sbtest fork' % (1 << SYS_fork),
+        'echo DONE',
+    ]))
+    r.match('^sbtest: getpid ret -1',
+            '^sbtest: fork ret -1',
+            no=['^sbtest: CHILD RAN'])
+    matches = re.findall("sbtest: alive", r.qemu.output)
+    assert_equal(len(matches), 2, "Number of appearances of 'sbtest: alive'")
+
+@test(5, "sandbox_escape")
+def test_sandbox_escape():
+    r.run_qemu(shell_script([
+        'sandbox %d - sbtest escape' % (1 << SYS_open),
+        'echo DONE',
+    ]))
+    r.match('^sbtest: escape confined',
+            no=['^sbtest: escape ESCAPED'])
+
+@test(5, "sandbox_forkpath")
+def test_sandbox_forkpath():
+    r.run_qemu(shell_script([
+        'sandbox %d README sbtest forkpath' % (1 << SYS_open),
+        'echo DONE',
+    ]))
+    r.match('^sbtest: forkpath child README ok',
+            '^sbtest: forkpath child exec.sh denied',
+            no=['^sbtest: forkpath child README denied',
+                '^sbtest: forkpath child exec.sh ok'])
+
 @test(14, "attack")
 def test_attack():
     secret = random_str(8)
