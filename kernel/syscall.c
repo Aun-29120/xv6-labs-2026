@@ -20,8 +20,6 @@ fetchaddr(uint64 addr, uint64 *ip)
   return 0;
 }
 
-// Fetch the nul-terminated string at addr from the current process.
-// Returns length of string, not including nul, or -1 for error.
 int
 fetchstr(uint64 addr, char *buf, int max)
 {
@@ -30,7 +28,6 @@ fetchstr(uint64 addr, char *buf, int max)
     return -1;
   return strlen(buf);
 }
-
 static uint64
 argraw(int n)
 {
@@ -54,19 +51,21 @@ argraw(int n)
 }
 
 // Fetch the nth 32-bit system call argument.
-void
+int
 argint(int n, int *ip)
 {
   *ip = argraw(n);
+  return 0;
 }
 
 // Retrieve an argument as a pointer.
 // Doesn't check for legality, since
 // copyin/copyout will do that.
-void
+int
 argaddr(int n, uint64 *ip)
 {
   *ip = argraw(n);
+  return 0;
 }
 
 // Fetch the nth word-sized system call argument as a null-terminated string.
@@ -103,6 +102,7 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
+extern uint64 sys_interpose(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -130,6 +130,7 @@ static uint64 (*syscalls[])(void) = {
   [SYS_mkdir]   = sys_mkdir,
   [SYS_close]   = sys_close,
   [SYS_sync]    = sys_sync,
+  [SYS_interpose] = sys_interpose,
   // clang-format on
 };
 
@@ -141,6 +142,22 @@ syscall(void)
 
   num = p->trapframe->a7;
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    if (p->interpose_mask & (1 << num)) {
+      int allowed = 0;
+
+      if (num == SYS_open || num == SYS_exec) {
+        char path[MAXPATH];
+        if (argstr(0, path, MAXPATH) >= 0 &&
+            strncmp(path, p->interpose_path, MAXPATH) == 0) {
+          allowed = 1;
+        }
+      }
+
+      if (!allowed) {
+        p->trapframe->a0 = -1;
+        return;
+      }
+    }
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();

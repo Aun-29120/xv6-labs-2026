@@ -110,3 +110,25 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+uint64
+sys_interpose(void)
+{
+  int mask;
+  char path[MAXPATH];
+  struct proc *p = myproc();
+
+  if (argint(0, &mask) < 0)
+    return -1;
+  if (argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  // Once a process is sandboxed, it must not be able to alter or
+  // remove its own restrictions by calling interpose() again.
+  if (p->interpose_mask != 0)
+    return -1;
+
+  p->interpose_mask = mask;
+  safestrcpy(p->interpose_path, path, MAXPATH);
+
+  return 0;
+}

@@ -289,6 +289,10 @@ kfork(void)
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
+  // Inherit the interpose mask from the parent.
+  np->interpose_mask = p->interpose_mask;
+  safestrcpy(np->interpose_path, p->interpose_path, MAXPATH);
+
   pid = np->pid;
 
   release(&np->lock);

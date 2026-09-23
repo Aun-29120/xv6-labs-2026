@@ -1,0 +1,6 @@
+Which function called syscall? usertrap() (in kernel/trap.c)
+p->trapframe->a7 value and meaning?  0xf (15) = SYS_open; the syscall number init is making (opening the console device), placed in a7 per the RISC-V calling convention before ecall
+Previous CPU mode (from sstatus)?  User mode (SPP bit = 0)
+Faulting instruction and register for num? lw a3,0(zero) at 80001d20; register a3
+Why does the kernel crash? scause=0xd = load page fault; virtual address 0 is unmapped in the kernel's page table (by design, so null-pointer dereferences fault immediately rather than silently corrupting memory), so reading from address 0 triggers a page fault, and any fault while already in supervisor mode is treated as fatal (panic: kerneltrap)
+Process name and pid at panic? init, pid 1
